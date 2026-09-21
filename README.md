@@ -21,7 +21,7 @@ feature families and candidate K grids. Each configuration now runs **once**:
   is retained; the Bank notebook does not apply the same additional scaling.
 - Balanced training weights, stratified minibatches with inverse-probability
   correction, initial batch 256, no L2 penalty, and maximum 10,000 iterations.
-- L1/L2 comparison baselines are disabled in the full workflow.
+- L1/L2 comparison baselines are disabled in the full grid.
 
 Training selection is in-sample; it is not cross-validation. The same municipality
 can appear in both partitions because the split is over municipality-window rows.
@@ -45,7 +45,7 @@ Every entry point also accepts `--bankit-root PATH`, which overrides `BANKIT_ROO
 confidential (Banca d'Italia data-sharing agreement), so it is gitignored there and
 you will not get it from the clone. Ask Matteo for the folder and place it at
 `$BANKIT_ROOT/data/Anticipazioni/`. Without it, the `anticipazioni` feature sets cannot
-be built, and the source hash check in the workflow will refuse to run because the
+be built, and the source hash check will refuse to run because the
 hash covers every CSV under `data/`.
 
 `data/processed/` and `results/` are generated locally and are gitignored. Results
@@ -62,7 +62,7 @@ missing non-indicator values still raise an error rather than dropping rows.
 The inspected source roster and the thesis reference panel contain **7,773
 municipalities**. The saved configuration records this count and a source-data hash.
 If the source roster is corrected later, regenerate the configuration from the
-new data before rerunning. The workflow refuses changed source files rather than
+new data before rerunning. The grid script refuses changed source files rather than
 silently combining results from different datasets.
 
 ReadyBDAP is the Impegni/Accertamenti subset of the shared financial CSVs. The
@@ -70,39 +70,33 @@ loader itself does not establish that those CSVs are forecast-budget data.
 
 ## Run all 27 configurations
 
+With no experiment options, the grid script runs every experiment in
+`configs/experiments_10000.json` (10,000 iterations, seed 42, random 80/20 split):
+
 ```bash
 cd piht_classification_git   # with BANKIT_ROOT set, see "Getting the data"
-caffeinate -i .venv/bin/python -u scripts/run_10000_workflow.py
+PYTHONPATH=src caffeinate -i .venv/bin/python -u scripts/run_bdap_piht_grid.py
 ```
 
-Preview the commands without fitting or changing results:
-
-```bash
-.venv/bin/python scripts/run_10000_workflow.py --dry-run
-```
-
-Each completed result is written atomically. Matching completed configurations
-are skipped on resume. Incompatible results are refused, not overwritten. The
-grid runner rebuilds processed datasets from current source CSVs and never
-silently reuses an older filtered NPZ. The old shell entry point
-`scripts/rerun_current_random_split.sh` now delegates to this same workflow.
-
-After fitting, the workflow refreshes `notebooks/inspect_results.ipynb`, exports
-plots to `results/notebook_plots/`, and writes
-`results/workflow_10000_complete.json` with hashes of the configuration, results,
-notebook, plots, and protocol source files. Its existence indicates completion;
-an interrupted run can be resumed with the same command.
+Each completed result is written atomically to `results/`. Matching completed
+configurations are skipped on resume. Incompatible results are refused, not
+overwritten. Processed datasets are rebuilt from the current source CSVs and an older
+filtered NPZ is never reused. The run also refuses to start if the source CSVs differ
+from the ones recorded in the configuration (source hash) or if a data shape changes.
 
 The summary table contains the training-selected model for each of the three horizons.
 Diagnostic figures additionally contain one held-out point and support for every
 candidate sparsity value at each horizon; candidate test results do not enter selection.
-Do not interpret any existing thesis figures as results of this new run until they are refreshed.
+`notebooks/inspect_results.ipynb` reads the saved results; it is not refreshed
+automatically.
 
 ## Individual runs
 
+`--features` selects a single feature set and a custom grid; `--periods`, `--input-depths`,
+`--target-depths` and `--k` only apply together with it. `--bankit-root` overrides `$BANKIT_ROOT`.
+
 ```bash
 PYTHONPATH=src .venv/bin/python scripts/run_bdap_piht_grid.py \
-  --bankit-root "$BANKIT_ROOT" \
   --features bdap --periods 1 --input-depths 1 --target-depths 1 \
   --k 5 10 15 20 25 30 35 36 --iterations 10000 --repeats 1 --seed 42 \
   --results-dir results_single --data-dir data/processed_single
@@ -110,7 +104,7 @@ PYTHONPATH=src .venv/bin/python scripts/run_bdap_piht_grid.py \
 
 The installed `piht-classification prepare-bankit` and `run` commands also use
 the new defaults. `prepare-bankit --exclude-autonomous-regions` explicitly opts
-into the old regional subset; the national grid/workflow never uses that option.
+into the old regional subset; the national grid never uses that option.
 The optional group split remains available as a separate design.
 
 ## Verification
