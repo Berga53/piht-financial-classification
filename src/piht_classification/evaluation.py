@@ -1,8 +1,9 @@
-"""Leakage-safe model selection and evaluation."""
+"""Bankitalia-style 80/20 evaluation; selection uses training data only."""
 
 from __future__ import annotations
 
 import warnings
+from time import perf_counter
 from typing import Iterable
 
 import numpy as np
@@ -22,13 +23,15 @@ from sklearn.preprocessing import StandardScaler
 from .estimator import SparsePIHTLogisticClassifier
 
 
-def best_f1_threshold(y_true, probabilities, step: float = 0.01) -> tuple[float, float]:
-    best_threshold, best_f1 = 0.5, -1.0
-    for threshold in np.arange(0.0, 1.0 + 1e-12, step):
-        score = f1_score(y_true, probabilities > threshold, zero_division=0)
-        if score > best_f1:
-            best_threshold, best_f1 = float(threshold), float(score)
-    return best_threshold, best_f1
+PROTOCOL = "piht_80_20_training_selection_per_s_v2"
+
+
+def best_f1_threshold(y_true, probabilities) -> tuple[float, float]:
+    """Match Bankitalia: training F1, grid 0:0.01:1, strict >, first tied maximum."""
+    thresholds = np.arange(0, 1 + 1e-9, 0.01)
+    scores = [f1_score(y_true, probabilities > t, zero_division=0) for t in thresholds]
+    best = int(np.argmax(scores))
+    return float(thresholds[best]), float(scores[best])
 
 
 def binary_metrics(y_true, probabilities, threshold: float) -> dict:
@@ -56,28 +59,17 @@ def _group_split(X, y, groups, seed: int) -> tuple[np.ndarray, np.ndarray]:
         return next(splitter.split(X, y, groups))
 
 
-def _three_way_split(X, y, groups, strategy: str, seed: int):
-    indices = np.arange(len(y))
+def _train_test_split(X, y, groups, strategy: str, seed: int):
     if strategy == "group":
-        train_val_local, test_local = _group_split(X, y, groups, seed)
-        fit_local, val_within = _group_split(
-            X[train_val_local], y[train_val_local], groups[train_val_local], seed + 1
-        )
-        fit = train_val_local[fit_local]
-        validation = train_val_local[val_within]
-        return fit, validation, test_local
+        return _group_split(X, y, groups, seed)
     if strategy == "random":
-        train_val, test = train_test_split(
-            indices, test_size=0.2, stratify=y, random_state=seed
+        return train_test_split(
+            np.arange(len(y)), test_size=0.2, stratify=y, random_state=seed
         )
-        fit, validation = train_test_split(
-            train_val, test_size=0.2, stratify=y[train_val], random_state=seed + 1
-        )
-        return fit, validation, test
     raise ValueError("split strategy must be 'group' or 'random'")
 
 
-def _fit_baseline(penalty, X_fit, y_fit, X_validation, y_validation, X_test, y_test, seed):
+def _fit_baseline(penalty, X_fit, y_fit, X_test, y_test, seed):
     model = LogisticRegression(
         penalty=penalty,
         C=1.0,
@@ -94,13 +86,13 @@ def _fit_baseline(penalty, X_fit, y_fit, X_validation, y_validation, X_test, y_t
             "ignore", category=RuntimeWarning, module=r"sklearn\.utils\.extmath"
         )
         model.fit(X_fit, y_fit)
-        validation_probability = model.predict_proba(X_validation)[:, 1]
+        training_probability = model.predict_proba(X_fit)[:, 1]
         test_probability = model.predict_proba(X_test)[:, 1]
     if not np.isfinite(model.coef_).all():
         raise FloatingPointError(f"{penalty} logistic baseline produced non-finite coefficients")
-    if not np.isfinite(validation_probability).all() or not np.isfinite(test_probability).all():
+    if not np.isfinite(training_probability).all() or not np.isfinite(test_probability).all():
         raise FloatingPointError(f"{penalty} logistic baseline produced non-finite probabilities")
-    threshold, _ = best_f1_threshold(y_validation, validation_probability)
+    threshold, _ = best_f1_threshold(y_fit, training_probability)
     metrics = binary_metrics(y_test, test_probability, threshold)
     metrics["support_size"] = int(np.count_nonzero(model.coef_))
     return metrics
@@ -114,11 +106,18 @@ def run_experiment(
     feature_names: list[str],
     k_values: Iterable[int],
     iterations: int = 1000,
-    repeats: int = 10,
-    split_strategy: str = "group",
+    repeats: int = 1,
+    seed: int = 42,
+    split_strategy: str = "random",
     l2: float = 0.0,
-    batch_size_initial: int = 64,
+    batch_size_initial: int = 256,
+    batch_sampling: str = "stratified",
+    min_positive_fraction: float = 0.1,
+    include_baselines: bool = True,
+    verbose: bool = False,
+    progress_every: int = 1000,
 ) -> dict:
+    experiment_started = perf_counter()
     X = np.asarray(X, dtype=float)
     y = np.asarray(y, dtype=int)
     groups = np.asarray(groups)
@@ -127,82 +126,189 @@ def run_experiment(
         raise ValueError("provide at least one K value")
     if k_values[0] < 0 or k_values[-1] > X.shape[1]:
         raise ValueError(f"K values must be between 0 and {X.shape[1]}")
+    if repeats < 1:
+        raise ValueError("repeats must be positive")
+    if seed < 0:
+        raise ValueError("seed must be nonnegative")
+    if progress_every < 1:
+        raise ValueError("progress_every must be at least 1")
+
+    if verbose:
+        print(
+            f"PIHT experiment: {repeats} repetitions, {len(k_values)} K values, "
+            f"{iterations} maximum iterations per fit",
+            flush=True,
+        )
 
     repetitions = []
-    for seed in range(repeats):
-        fit_idx, validation_idx, test_idx = _three_way_split(
+    first_seed = seed
+    for repetition_index, seed in enumerate(range(first_seed, first_seed + repeats), start=1):
+        repetition_started = perf_counter()
+        repetition_prefix = f"[repetition {repetition_index}/{repeats}, seed={seed}]"
+        if verbose:
+            print(f"{repetition_prefix} creating train/test split", flush=True)
+        fit_idx, test_idx = _train_test_split(
             X, y, groups, split_strategy, seed
         )
         scaler = StandardScaler().fit(X[fit_idx])
         X_fit = scaler.transform(X[fit_idx])
-        X_validation = scaler.transform(X[validation_idx])
         X_test = scaler.transform(X[test_idx])
+        if verbose:
+            print(
+                f"{repetition_prefix} sizes: fit={len(fit_idx)}, "
+                f"test={len(test_idx)}",
+                flush=True,
+            )
 
         candidates = []
-        fitted_models = []
-        for k in k_values:
+        for k_position, k in enumerate(k_values, start=1):
+            fit_prefix = (
+                f"{repetition_prefix} [K {k_position}/{len(k_values)}: {k}]"
+            )
             model = SparsePIHTLogisticClassifier(
                 k=k,
                 max_iter=iterations,
                 batch_size_initial=batch_size_initial,
                 batch_size_max=len(fit_idx),
+                batch_sampling=batch_sampling,
+                min_positive_fraction=min_positive_fraction,
                 l2=l2,
                 class_weight="balanced",
                 random_state=seed,
             )
-            model.fit(X_fit, y[fit_idx])
-            validation_probability = model.predict_proba(X_validation)[:, 1]
-            validation_ap = average_precision_score(y[validation_idx], validation_probability)
-            candidates.append({"k": k, "validation_average_precision": float(validation_ap)})
-            fitted_models.append(model)
+            fit_started = perf_counter()
+            if verbose:
+                print(f"{fit_prefix} fitting", flush=True)
 
-        best_position = int(np.argmax([item["validation_average_precision"] for item in candidates]))
-        best_model = fitted_models[best_position]
-        best_k = candidates[best_position]["k"]
-        validation_probability = best_model.predict_proba(X_validation)[:, 1]
-        threshold, validation_f1 = best_f1_threshold(y[validation_idx], validation_probability)
-        test_probability = best_model.predict_proba(X_test)[:, 1]
-        piht_metrics = binary_metrics(y[test_idx], test_probability, threshold)
-        support = best_model.support_.tolist()
+            def report_iteration(state, *, _started=fit_started, _prefix=fit_prefix):
+                iteration = int(state["iteration"])
+                if iteration != 1 and iteration % progress_every != 0:
+                    return
+                print(
+                    f"{_prefix} iteration {iteration}/{iterations}; "
+                    f"loss={float(state['loss']):.6f}; "
+                    f"batch={int(state['batch_size'])}; "
+                    f"positives={int(state['gradient_positive_count'])}; "
+                    f"support={int(state['support_size'])}; "
+                    f"elapsed={perf_counter() - _started:.1f}s",
+                    flush=True,
+                )
+
+            model.fit(
+                X_fit,
+                y[fit_idx],
+                progress_callback=report_iteration if verbose else None,
+            )
+            fit_seconds = perf_counter() - fit_started
+            training_probability = model.predict_proba(X_fit)[:, 1]
+            training_ap = average_precision_score(y[fit_idx], training_probability)
+            threshold, training_f1 = best_f1_threshold(
+                y[fit_idx], training_probability
+            )
+            test_probability = model.predict_proba(X_test)[:, 1]
+            test_metrics = binary_metrics(y[test_idx], test_probability, threshold)
+            support = model.support_.tolist()
+            candidates.append(
+                {
+                    "k": k,
+                    "training_average_precision": float(training_ap),
+                    "training_f1_at_threshold": training_f1,
+                    "test_metrics": test_metrics,
+                    "support_size": len(support),
+                    "selected_features": [feature_names[index] for index in support],
+                    "iterations_run": int(model.n_iter_[0]),
+                    "acceptance_rate": float(
+                        np.mean([row["accepted"] for row in model.history_])
+                    )
+                    if model.history_
+                    else 0.0,
+                    "fit_seconds": fit_seconds,
+                }
+            )
+            if verbose:
+                print(
+                    f"{fit_prefix} finished in {fit_seconds:.1f}s; "
+                    f"iterations={int(model.n_iter_[0])}; training AP={training_ap:.6f}",
+                    flush=True,
+                )
+
+        training_scores = [item["training_average_precision"] for item in candidates]
+        best_position = int(np.argmax(training_scores))
+        selected_candidate = candidates[best_position]
+        best_k = selected_candidate["k"]
+        piht_metrics = dict(selected_candidate["test_metrics"])
         piht_metrics.update(
             {
                 "selected_k": best_k,
-                "support_size": len(support),
-                "selected_features": [feature_names[index] for index in support],
-                "validation_f1_at_threshold": validation_f1,
-                "iterations_run": int(best_model.n_iter_[0]),
-                "acceptance_rate": float(
-                    np.mean([row["accepted"] for row in best_model.history_])
-                )
-                if best_model.history_
-                else 0.0,
+                "support_size": selected_candidate["support_size"],
+                "selected_features": selected_candidate["selected_features"],
+                "training_f1_at_threshold": selected_candidate[
+                    "training_f1_at_threshold"
+                ],
+                "iterations_run": selected_candidate["iterations_run"],
+                "acceptance_rate": selected_candidate["acceptance_rate"],
+                "selected_model_fit_seconds": selected_candidate["fit_seconds"],
             }
         )
 
-        repetitions.append(
-            {
-                "seed": seed,
-                "sizes": {
-                    "fit": len(fit_idx),
-                    "validation": len(validation_idx),
-                    "test": len(test_idx),
-                },
-                "k_selection": candidates,
-                "piht": piht_metrics,
-                "l1_logistic": _fit_baseline(
-                    "l1", X_fit, y[fit_idx], X_validation, y[validation_idx], X_test, y[test_idx], seed
-                ),
-                "l2_logistic": _fit_baseline(
-                    "l2", X_fit, y[fit_idx], X_validation, y[validation_idx], X_test, y[test_idx], seed
-                ),
-            }
-        )
+        repetition = {
+            "seed": seed,
+            "sizes": {
+                "train": len(fit_idx),
+                "test": len(test_idx),
+            },
+            "k_selection": candidates,
+            "piht": piht_metrics,
+        }
+        if include_baselines:
+            repetition.update(
+                {
+                    "l1_logistic": _fit_baseline(
+                        "l1",
+                        X_fit,
+                        y[fit_idx],
+                        X_test,
+                        y[test_idx],
+                        seed,
+                    ),
+                    "l2_logistic": _fit_baseline(
+                        "l2",
+                        X_fit,
+                        y[fit_idx],
+                        X_test,
+                        y[test_idx],
+                        seed,
+                    ),
+                }
+            )
+        repetition["runtime_seconds"] = perf_counter() - repetition_started
+        repetitions.append(repetition)
+        if verbose:
+            print(
+                f"{repetition_prefix} selected K={best_k}; "
+                f"test AP={piht_metrics['average_precision']:.6f}; "
+                f"ROC AUC={piht_metrics['roc_auc']:.6f}; "
+                f"finished in {repetition['runtime_seconds']:.1f}s",
+                flush=True,
+            )
 
-    return {
+    result = {
+        "protocol": PROTOCOL,
+        "seed": first_seed,
+        "selection_data": "training",
+        "scaling": "standard_fit_on_training",
         "split_strategy": split_strategy,
         "repeats": repeats,
         "k_values": k_values,
         "l2": l2,
         "iterations": iterations,
+        "batch_size_initial": batch_size_initial,
+        "batch_sampling": batch_sampling,
+        "min_positive_fraction": min_positive_fraction,
+        "include_baselines": include_baselines,
         "repetitions": repetitions,
+        "runtime_seconds": perf_counter() - experiment_started,
     }
+    if verbose:
+        print(f"PIHT experiment finished in {result['runtime_seconds']:.1f}s", flush=True)
+    return result

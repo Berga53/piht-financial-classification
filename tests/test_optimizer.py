@@ -8,10 +8,35 @@ from sklearn.metrics import average_precision_score
 from sklearn.preprocessing import StandardScaler
 
 from piht_classification import SparsePIHTLogisticClassifier, hard_threshold
-from piht_classification.optimizer import logistic_gradient, logistic_loss
+from piht_classification.optimizer import (
+    adaptive_batch_size,
+    logistic_gradient,
+    logistic_loss,
+    sample_minibatch,
+)
 
 
 class OptimizerTests(unittest.TestCase):
+    def test_initial_batch_size_is_the_actual_first_batch_size(self):
+        self.assertEqual(adaptive_batch_size(1.0, 1.0, 256, 2_000), 256)
+        self.assertEqual(adaptive_batch_size(0.5, 1.0, 256, 2_000), 512)
+        self.assertEqual(adaptive_batch_size(0.25, 1.0, 256, 2_000), 2_000)
+
+    def test_stratified_batch_guarantees_positives_and_corrects_sampling_weights(self):
+        y = np.concatenate((np.zeros(980), np.ones(20)))
+        indices, correction = sample_minibatch(
+            np.random.default_rng(12),
+            y,
+            100,
+            strategy="stratified",
+            min_positive_fraction=0.1,
+        )
+
+        sampled_y = y[indices]
+        self.assertEqual(int(sampled_y.sum()), 10)
+        self.assertAlmostEqual(float(correction[sampled_y == 1].sum()), 20.0)
+        self.assertAlmostEqual(float(correction[sampled_y == 0].sum()), 980.0)
+
     def test_hard_threshold_is_exact_and_non_mutating(self):
         values = np.array([1.0, -4.0, 2.0, 0.5])
         original = values.copy()
@@ -62,6 +87,9 @@ class OptimizerTests(unittest.TestCase):
             random_state=7,
         ).fit(X, y)
         self.assertLessEqual(len(model.support_), 4)
+        self.assertTrue(
+            all(state["gradient_positive_count"] >= 3 for state in model.history_)
+        )
         score = average_precision_score(y, model.predict_proba(X)[:, 1])
         self.assertGreater(score, 0.60)
 

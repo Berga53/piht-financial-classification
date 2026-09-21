@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -15,8 +16,10 @@ FloatArray = NDArray[np.float64]
 class PIHTConfig:
     k: int
     max_iter: int = 1000
-    batch_size_initial: int = 64
+    batch_size_initial: int = 256
     batch_size_max: int | None = None
+    batch_sampling: str = "stratified"
+    min_positive_fraction: float = 0.1
     l2: float = 0.0
     eta1: float = 1e-4
     eta2: float = 1e-4
@@ -100,13 +103,79 @@ def adaptive_batch_size(
     batch_size_initial: int,
     batch_size_max: int,
 ) -> int:
-    """Batch schedule used by the sparsity-chapter implementation."""
+    """Increase batch size as the trust-region radius contracts.
+
+    ``batch_size_initial`` is the actual batch size while ``delta >= delta0``.
+    """
     if delta <= 0:
         return batch_size_max
-    exponent = delta0 / delta
+    exponent = max(0.0, delta0 / delta - 1.0)
     if exponent > 12:
         return batch_size_max
     return min(batch_size_max, max(1, int(batch_size_initial * (2.0**exponent))))
+
+
+def sample_minibatch(
+    rng: np.random.Generator,
+    y: FloatArray,
+    batch_size: int,
+    *,
+    strategy: str,
+    min_positive_fraction: float,
+) -> tuple[NDArray[np.int64], FloatArray]:
+    """Sample a batch and return inverse-probability weight corrections.
+
+    Stratified batches never reduce the observed positive share and, when
+    possible, contain at least ``min_positive_fraction`` positives. The
+    corrections preserve the full-data class contribution, avoiding accidental
+    double weighting when the estimator also uses balanced class weights.
+    """
+    y = np.asarray(y)
+    n_samples = len(y)
+    if not 1 <= batch_size <= n_samples:
+        raise ValueError("batch_size must be between 1 and the number of samples")
+    if strategy not in {"uniform", "stratified"}:
+        raise ValueError("batch_sampling must be 'uniform' or 'stratified'")
+    if not 0.0 <= min_positive_fraction < 1.0:
+        raise ValueError("min_positive_fraction must be at least 0 and less than 1")
+
+    if batch_size == n_samples:
+        return np.arange(n_samples, dtype=np.int64), np.ones(n_samples, dtype=float)
+    if strategy == "uniform":
+        indices = rng.choice(n_samples, size=batch_size, replace=False)
+        return np.asarray(indices, dtype=np.int64), np.ones(batch_size, dtype=float)
+    if batch_size < 2:
+        raise ValueError("stratified batching requires a batch size of at least 2")
+
+    positive_pool = np.flatnonzero(y == 1)
+    negative_pool = np.flatnonzero(y == 0)
+    if not len(positive_pool) or not len(negative_pool):
+        raise ValueError("stratified batching requires both classes")
+
+    observed_fraction = len(positive_pool) / n_samples
+    target_fraction = max(observed_fraction, min_positive_fraction)
+    positive_count = max(1, int(np.ceil(batch_size * target_fraction)))
+    positive_count = min(positive_count, len(positive_pool), batch_size - 1)
+    negative_count = batch_size - positive_count
+
+    if negative_count > len(negative_pool):
+        negative_count = len(negative_pool)
+        positive_count = batch_size - negative_count
+    if positive_count > len(positive_pool):
+        positive_count = len(positive_pool)
+        negative_count = batch_size - positive_count
+
+    positive_indices = rng.choice(positive_pool, size=positive_count, replace=False)
+    negative_indices = rng.choice(negative_pool, size=negative_count, replace=False)
+    indices = np.concatenate((positive_indices, negative_indices))
+    corrections = np.concatenate(
+        (
+            np.full(positive_count, len(positive_pool) / positive_count),
+            np.full(negative_count, len(negative_pool) / negative_count),
+        )
+    )
+    order = rng.permutation(batch_size)
+    return indices[order].astype(np.int64, copy=False), corrections[order]
 
 
 def fit_piht_logistic(
@@ -114,6 +183,7 @@ def fit_piht_logistic(
     y: FloatArray,
     sample_weight: FloatArray,
     config: PIHTConfig,
+    progress_callback: Callable[[dict[str, float | int | bool]], None] | None = None,
 ) -> PIHTResult:
     """Fit sparse logistic regression with the chapter's PIHT accept/reject rule."""
     X = np.asarray(X, dtype=float)
@@ -127,6 +197,12 @@ def fit_piht_logistic(
         raise ValueError("gamma must be greater than 1")
     if config.delta0 <= 0 or config.delta_max <= 0:
         raise ValueError("delta0 and delta_max must be positive")
+    if config.batch_size_initial < 1:
+        raise ValueError("batch_size_initial must be positive")
+    if config.batch_sampling not in {"uniform", "stratified"}:
+        raise ValueError("batch_sampling must be 'uniform' or 'stratified'")
+    if not 0.0 <= config.min_positive_fraction < 1.0:
+        raise ValueError("min_positive_fraction must be at least 0 and less than 1")
     if sample_weight.shape != (n_samples,) or np.any(sample_weight <= 0):
         raise ValueError("sample_weight must contain one positive value per observation")
 
@@ -142,13 +218,19 @@ def fit_piht_logistic(
         batch_size = adaptive_batch_size(
             delta, config.delta0, config.batch_size_initial, batch_size_max
         )
-        gradient_indices = rng.choice(n_samples, size=batch_size, replace=False)
+        gradient_indices, gradient_correction = sample_minibatch(
+            rng,
+            y,
+            batch_size,
+            strategy=config.batch_sampling,
+            min_positive_fraction=config.min_positive_fraction,
+        )
         grad_coef, grad_intercept = logistic_gradient(
             coef,
             intercept,
             X[gradient_indices],
             y[gradient_indices],
-            sample_weight[gradient_indices],
+            sample_weight[gradient_indices] * gradient_correction,
             config.l2,
         )
         gradient_norm = float(
@@ -163,13 +245,19 @@ def fit_piht_logistic(
         candidate_coef = hard_threshold(coef - step_scale * grad_coef, config.k)
         candidate_intercept = intercept - step_scale * grad_intercept
 
-        acceptance_indices = rng.choice(n_samples, size=batch_size, replace=False)
+        acceptance_indices, acceptance_correction = sample_minibatch(
+            rng,
+            y,
+            batch_size,
+            strategy=config.batch_sampling,
+            min_positive_fraction=config.min_positive_fraction,
+        )
         current_loss = logistic_loss(
             coef,
             intercept,
             X[acceptance_indices],
             y[acceptance_indices],
-            sample_weight[acceptance_indices],
+            sample_weight[acceptance_indices] * acceptance_correction,
             config.l2,
         )
         candidate_loss = logistic_loss(
@@ -177,7 +265,7 @@ def fit_piht_logistic(
             candidate_intercept,
             X[acceptance_indices],
             y[acceptance_indices],
-            sample_weight[acceptance_indices],
+            sample_weight[acceptance_indices] * acceptance_correction,
             config.l2,
         )
         denominator = gradient_norm * delta
@@ -191,19 +279,22 @@ def fit_piht_logistic(
         else:
             delta /= config.gamma
 
-        history.append(
-            {
-                "iteration": iteration + 1,
-                "accepted": accepted,
-                "loss": candidate_loss if accepted else current_loss,
-                "candidate_loss": candidate_loss,
-                "gradient_norm": gradient_norm,
-                "ratio": float(ratio),
-                "delta": delta,
-                "batch_size": batch_size,
-                "support_size": int(np.count_nonzero(coef)),
-            }
-        )
+        state = {
+            "iteration": iteration + 1,
+            "accepted": accepted,
+            "loss": candidate_loss if accepted else current_loss,
+            "candidate_loss": candidate_loss,
+            "gradient_norm": gradient_norm,
+            "ratio": float(ratio),
+            "delta": delta,
+            "batch_size": batch_size,
+            "gradient_positive_count": int(y[gradient_indices].sum()),
+            "acceptance_positive_count": int(y[acceptance_indices].sum()),
+            "support_size": int(np.count_nonzero(coef)),
+        }
+        history.append(state)
+        if progress_callback is not None:
+            progress_callback(state)
         if delta < config.min_delta:
             break
 

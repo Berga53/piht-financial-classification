@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from .data import flatten_panel, load_dataset, prepare_bankit_dataset, save_dataset
@@ -15,32 +16,72 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     prepare = subparsers.add_parser("prepare-bankit", help="build a Bankitalia panel dataset")
-    prepare.add_argument("--bankit-root", type=Path, required=True)
+    prepare.add_argument(
+        "--bankit-root", type=Path, default=os.environ.get("BANKIT_ROOT"),
+        required="BANKIT_ROOT" not in os.environ,
+        help="checkout of municipal-financial-distress (default: $BANKIT_ROOT)",
+    )
     prepare.add_argument("--output", type=Path, required=True)
     prepare.add_argument("--period", type=int, choices=(1, 2), required=True)
-    prepare.add_argument("--input-depth", type=int, choices=(4, 5, 6), required=True)
+    prepare.add_argument("--input-depth", type=int, choices=(1, 4, 5, 6), required=True)
     prepare.add_argument("--target-depth", type=int, choices=(1, 2, 3), required=True)
     prepare.add_argument(
         "--features",
         choices=(
+            "anticipazioni",
             "bdap",
             "bdap-anticipazioni",
+            "bdap-anticipazioni-reduced",
             "bdap-indicatori-anticipazioni",
             "indicatori",
+            "indicatori-anticipazioni",
+            "readybdap-anticipazioni",
         ),
         default="bdap",
     )
-    prepare.add_argument("--include-autonomous-regions", action="store_true")
+    prepare.add_argument("--include-autonomous-regions", action="store_true", default=True,
+                         help="include all regions (default)")
+    prepare.add_argument("--exclude-autonomous-regions", action="store_true",
+                         help="explicitly reproduce the old regional test subset")
 
     run = subparsers.add_parser("run", help="select K and evaluate PIHT")
     run.add_argument("--dataset", type=Path, required=True)
     run.add_argument("--output", type=Path, required=True)
     run.add_argument("--k", type=int, nargs="+", required=True)
     run.add_argument("--iterations", type=int, default=1000)
-    run.add_argument("--repeats", type=int, default=10)
-    run.add_argument("--split-strategy", choices=("group", "random"), default="group")
+    run.add_argument("--repeats", type=int, default=1)
+    run.add_argument("--seed", type=int, default=42)
+    run.add_argument(
+        "--split-strategy", choices=("group", "random"), default="random",
+        help="random row split as in the Bankitalia notebook (default), or municipality groups",
+    )
     run.add_argument("--l2", type=float, default=0.0)
-    run.add_argument("--batch-size-initial", type=int, default=64)
+    run.add_argument("--batch-size-initial", type=int, default=256)
+    run.add_argument(
+        "--batch-sampling",
+        choices=("stratified", "uniform"),
+        default="stratified",
+        help="mini-batch sampling strategy (default: stratified)",
+    )
+    run.add_argument(
+        "--min-positive-fraction",
+        type=float,
+        default=0.1,
+        help="minimum positive share in stratified mini-batches (default: 0.1)",
+    )
+    run.add_argument(
+        "--progress-every",
+        type=int,
+        default=1000,
+        metavar="ITERATIONS",
+        help="print a progress update this often during each PIHT fit (default: 1000)",
+    )
+    run.add_argument("--quiet", action="store_true", help="disable live progress output")
+    run.add_argument(
+        "--piht-only",
+        action="store_true",
+        help="skip the L1 and L2 logistic-regression baselines",
+    )
     return parser
 
 
@@ -53,7 +94,7 @@ def main() -> None:
             input_depth=args.input_depth,
             target_depth=args.target_depth,
             features=args.features,
-            exclude_autonomous_regions=not args.include_autonomous_regions,
+            exclude_autonomous_regions=args.exclude_autonomous_regions,
         )
         save_dataset(dataset, args.output)
         print(
@@ -69,6 +110,8 @@ def main() -> None:
         )
         return
 
+    if args.output.exists():
+        raise FileExistsError(f"{args.output} already exists; choose a new output path")
     dataset = load_dataset(args.dataset)
     X, feature_names = flatten_panel(dataset)
     results = run_experiment(
@@ -79,9 +122,15 @@ def main() -> None:
         k_values=args.k,
         iterations=args.iterations,
         repeats=args.repeats,
+        seed=args.seed,
         split_strategy=args.split_strategy,
         l2=args.l2,
         batch_size_initial=args.batch_size_initial,
+        batch_sampling=args.batch_sampling,
+        min_positive_fraction=args.min_positive_fraction,
+        include_baselines=not args.piht_only,
+        verbose=not args.quiet,
+        progress_every=args.progress_every,
     )
     results["dataset"] = dataset.metadata
     results["shape"] = list(X.shape)
@@ -92,4 +141,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,807 @@
+{
+  "settings": {
+    "repeats": 1,
+    "l2": 0.0,
+    "iterations": 10000,
+    "batch_size_initial": 256,
+    "batch_sampling": "stratified",
+    "min_positive_fraction": 0.1,
+    "include_baselines": false,
+    "split_strategy": "random",
+    "seed": 42,
+    "protocol": "piht_80_20_training_selection_per_s_v2",
+    "selection_data": "training",
+    "scaling": "standard_fit_on_training"
+  },
+  "experiments": [
+    {
+      "filename": "bdap_anticipazioni_p1_i1_h1_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        41
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        41
+      ]
+    },
+    {
+      "filename": "bdap_anticipazioni_p1_i1_h2_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        41
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        41
+      ]
+    },
+    {
+      "filename": "bdap_anticipazioni_p1_i1_h3_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        41
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        41
+      ]
+    },
+    {
+      "filename": "bdap_anticipazioni_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        53
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50,
+        53
+      ]
+    },
+    {
+      "filename": "bdap_anticipazioni_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        53
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50,
+        53
+      ]
+    },
+    {
+      "filename": "bdap_anticipazioni_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "bdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        53
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        50,
+        53
+      ]
+    },
+    {
+      "filename": "bdap_indicatori_anticipazioni_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "bdap-indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        63
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        50,
+        60,
+        63
+      ]
+    },
+    {
+      "filename": "bdap_indicatori_anticipazioni_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "bdap-indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        63
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        50,
+        60,
+        63
+      ]
+    },
+    {
+      "filename": "bdap_indicatori_anticipazioni_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "bdap-indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        63
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        50,
+        60,
+        63
+      ]
+    },
+    {
+      "filename": "bdap_p1_i1_h1_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        36
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        36
+      ]
+    },
+    {
+      "filename": "bdap_p1_i1_h2_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        36
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        36
+      ]
+    },
+    {
+      "filename": "bdap_p1_i1_h3_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        36
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        36
+      ]
+    },
+    {
+      "filename": "bdap_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        48
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        48
+      ]
+    },
+    {
+      "filename": "bdap_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        48
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        48
+      ]
+    },
+    {
+      "filename": "bdap_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "bdap",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        48
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        35,
+        40,
+        45,
+        48
+      ]
+    },
+    {
+      "filename": "indicatori_anticipazioni_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        15
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10,
+        12,
+        15
+      ]
+    },
+    {
+      "filename": "indicatori_anticipazioni_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        15
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10,
+        12,
+        15
+      ]
+    },
+    {
+      "filename": "indicatori_anticipazioni_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "indicatori-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        15
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10,
+        12,
+        15
+      ]
+    },
+    {
+      "filename": "indicatori_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "indicatori",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        10
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10
+      ]
+    },
+    {
+      "filename": "indicatori_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "indicatori",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        10
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10
+      ]
+    },
+    {
+      "filename": "indicatori_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "indicatori",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        10
+      ],
+      "k_values": [
+        1,
+        2,
+        3,
+        5,
+        8,
+        10
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p1_i1_h1_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        21
+      ],
+      "k_values": [
+        3,
+        5,
+        8,
+        10,
+        12,
+        15,
+        18,
+        21
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p1_i1_h2_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        21
+      ],
+      "k_values": [
+        3,
+        5,
+        8,
+        10,
+        12,
+        15,
+        18,
+        21
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p1_i1_h3_piht.json",
+      "dataset": {
+        "period": 1,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        21
+      ],
+      "k_values": [
+        3,
+        5,
+        8,
+        10,
+        12,
+        15,
+        18,
+        21
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p2_i1_h1_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 1,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        62184,
+        25
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p2_i1_h2_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 2,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        54411,
+        25
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    },
+    {
+      "filename": "readybdap_anticipazioni_p2_i1_h3_piht.json",
+      "dataset": {
+        "period": 2,
+        "input_depth": 1,
+        "target_depth": 3,
+        "features": "readybdap-anticipazioni",
+        "excluded_autonomous_regions": false,
+        "municipality_count": 7773,
+        "source_sha256": "9d6c58714ecc903e34a8b4c68213c1b705001c519dd2d45253262b7407ed14b0",
+        "indicator_cohort": "common_roster",
+        "indicator_missing": "zero",
+        "data_protocol": "national_common_roster_v1"
+      },
+      "shape": [
+        46638,
+        25
+      ],
+      "k_values": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  ]
+}

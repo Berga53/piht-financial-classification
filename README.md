@@ -1,122 +1,124 @@
 # PIHT sparse classification
 
-This repository turns the PIHT method from the sparsity chapter into a binary
-classifier and evaluates it with the experimental structure of the final
-Bankitalia chapter.
+PIHT fits a class-weighted logistic model with at most K nonzero coefficients.
+The intercept is not thresholded. Adaptive stochastic gradients, independent
+acceptance batches, and hard thresholding implement the sparse optimiser.
 
-The model solves
+## Current municipal experiment
 
-\[
-\min_{w,b}\; \frac{1}{n}\sum_i \alpha_i
-\left[\log(1+e^{x_i^T w+b})-y_i(x_i^T w+b)\right]
-+ \frac{\lambda_2}{2}\lVert w\rVert_2^2
-\quad\text{subject to}\quad \lVert w\rVert_0\le K.
-\]
+The 27 configurations retain one-year inputs, horizons 1–3, and the existing
+feature families and candidate K grids. Each configuration now runs **once**:
 
-Here `K` is the exact feature budget. PIHT takes an adaptive stochastic-gradient
-step and hard-thresholds the coefficient vector after every proposal. The
-intercept is never thresholded. Balanced observation weights handle the rare
-positive class.
+- Stratified random **80% training / 20% testing**, seed **42**, as in the main
+  Bank of Italy `classification.ipynb` training function.
+- No separate validation partition. Every candidate K is fitted on the whole
+  training partition. Select K by **training average precision**; ties favour
+  the smaller K because the candidate grid is sorted.
+- Select the probability threshold by **training F1** on the Bank notebook's
+  grid `0, 0.01, ..., 1`, with a strict `probability > threshold` rule and the
+  first threshold winning ties. Test outcomes do not select K or the threshold.
+- Fit StandardScaler on training rows only. This PIHT optimisation preprocessing
+  is retained; the Bank notebook does not apply the same additional scaling.
+- Balanced training weights, stratified minibatches with inverse-probability
+  correction, initial batch 256, no L2 penalty, and maximum 10,000 iterations.
+- L1/L2 comparison baselines are disabled in the full workflow.
 
-## What is reused
+Training selection is in-sample; it is not cross-validation. The same municipality
+can appear in both partitions because the split is over municipality-window rows.
+One-year inputs produce different rows from the Bank study's 4–6-year inputs, so
+matching the split rule/seed does not mean identical held-out observations.
 
-From `/Users/matteobergamaschi/Desktop/dott/SCSO/Sparsity`:
+## Getting the data
 
-- independent mini-batches for the gradient and acceptance test;
-- the adaptive radius `delta` and accept/reject rule;
-- the increasing batch-size schedule;
-- hard thresholding after each proposed step.
-
-From `/Users/matteobergamaschi/Desktop/bankit_git/classification.ipynb`:
-
-- municipality/year panel construction;
-- input depths 4, 5, and 6 and target depths 1, 2, and 3;
-- balanced classification and F1 threshold selection;
-- precision, recall, F1, ROC-AUC, and PR-AUC reporting;
-- L1 and L2 logistic-regression baselines.
-
-## Important experimental correction
-
-The chapter notebook randomly splits rows after concatenating overlapping time
-windows. The same municipality can consequently occur in both train and test
-sets. It also chooses the classification threshold on fitted training scores.
-Both choices can make results optimistic.
-
-The default experiment here uses municipality-disjoint train/validation/test
-splits and chooses the threshold on validation predictions. Pass
-`--split-strategy random` only to reproduce the old row-level split as a
-sensitivity check.
-
-## Setup
+This repository does not contain any data. The raw CSVs come from the companion
+repository [`municipal-financial-distress`](https://github.com/Berga53/municipal-financial-distress).
+Clone it and point `BANKIT_ROOT` at the checkout before running anything:
 
 ```bash
-cd /Users/matteobergamaschi/Desktop/piht_classification_git
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
+git clone https://github.com/Berga53/municipal-financial-distress.git
+export BANKIT_ROOT=$PWD/municipal-financial-distress
 ```
 
-The original data stay in `bankit_git`; they are not copied into Git.
+Every entry point also accepts `--bankit-root PATH`, which overrides `BANKIT_ROOT`.
 
-## Prepare one Bankitalia design matrix
+**Anticipazioni data are not in that repository.** `data/Anticipazioni/` is
+confidential (Banca d'Italia data-sharing agreement), so it is gitignored there and
+you will not get it from the clone. Ask Matteo for the folder and place it at
+`$BANKIT_ROOT/data/Anticipazioni/`. Without it, the `anticipazioni` feature sets cannot
+be built, and the source hash check in the workflow will refuse to run because the
+hash covers every CSV under `data/`.
 
-This example reproduces the BDAP feature family for period 2, six input years,
-and a three-year prediction horizon:
+`data/processed/` and `results/` are generated locally and are gitignored. Results
+derived from the anticipazioni data are covered by the same agreement; do not commit
+or share them.
+
+## National sample and source files
+
+The data loader includes all regions by default. All predictor families retain
+the same municipality roster from `$BANKIT_ROOT/data/comuni.csv`. Indicator files
+are reindexed to that roster and missing indicator entries are filled with zero;
+missing non-indicator values still raise an error rather than dropping rows.
+
+The inspected source roster and the thesis reference panel contain **7,773
+municipalities**. The saved configuration records this count and a source-data hash.
+If the source roster is corrected later, regenerate the configuration from the
+new data before rerunning. The workflow refuses changed source files rather than
+silently combining results from different datasets.
+
+ReadyBDAP is the Impegni/Accertamenti subset of the shared financial CSVs. The
+loader itself does not establish that those CSVs are forecast-budget data.
+
+## Run all 27 configurations
 
 ```bash
-piht-classification prepare-bankit \
-  --bankit-root /Users/matteobergamaschi/Desktop/bankit_git \
-  --output data/processed/bdap_p2_i6_h3.npz \
-  --period 2 \
-  --input-depth 6 \
-  --target-depth 3 \
-  --features bdap
+cd piht_classification_git   # with BANKIT_ROOT set, see "Getting the data"
+caffeinate -i .venv/bin/python -u scripts/run_10000_workflow.py
 ```
 
-Available feature families are `bdap`, `bdap-anticipazioni`,
-`bdap-indicatori-anticipazioni`, and `indicatori`. The loader follows the
-chapter notebook, including the excluded autonomous regions and its period
-window definitions.
-
-## Run the sparse experiment
+Preview the commands without fitting or changing results:
 
 ```bash
-piht-classification run \
-  --dataset data/processed/bdap_p2_i6_h3.npz \
-  --output results/bdap_p2_i6_h3.json \
-  --k 5 10 20 40 80 \
-  --iterations 1000 \
-  --repeats 10
+.venv/bin/python scripts/run_10000_workflow.py --dry-run
 ```
 
-`K` must be selected on validation PR-AUC, never on the test set. A sensible
-full thesis grid is:
+Each completed result is written atomically. Matching completed configurations
+are skipped on resume. Incompatible results are refused, not overwritten. The
+grid runner rebuilds processed datasets from current source CSVs and never
+silently reuses an older filtered NPZ. The old shell entry point
+`scripts/rerun_current_random_split.sh` now delegates to this same workflow.
 
-- dataset family: the same families used in the final chapter;
-- period: 1 and 2;
-- input depth: 4, 5, 6;
-- target depth: 1, 2, 3;
-- sparsity budget: logarithmic grid from very small supports to the full model;
-- 10 random seeds with identical splits for PIHT, L1 logistic, and L2 logistic.
+After fitting, the workflow refreshes `notebooks/inspect_results.ipynb`, exports
+plots to `results/notebook_plots/`, and writes
+`results/workflow_10000_complete.json` with hashes of the configuration, results,
+notebook, plots, and protocol source files. Its existence indicates completion;
+an interrupted run can be resumed with the same command.
 
-Report both predictive performance and sparsity: median test PR-AUC, ROC-AUC,
-F1, precision, recall, support size, and feature-selection frequency. Keep the
-test set untouched until `K`, `lambda2`, PIHT settings, and the probability
-threshold have been chosen.
+The summary table contains the training-selected model for each of the three horizons.
+Diagnostic figures additionally contain one held-out point and support for every
+candidate sparsity value at each horizon; candidate test results do not enter selection.
+Do not interpret any existing thesis figures as results of this new run until they are refreshed.
 
-## Smoke test
+## Individual runs
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
-python scripts/run_synthetic.py
+PYTHONPATH=src .venv/bin/python scripts/run_bdap_piht_grid.py \
+  --bankit-root "$BANKIT_ROOT" \
+  --features bdap --periods 1 --input-depths 1 --target-depths 1 \
+  --k 5 10 15 20 25 30 35 36 --iterations 10000 --repeats 1 --seed 42 \
+  --results-dir results_single --data-dir data/processed_single
 ```
 
-## Recommended next steps
+The installed `piht-classification prepare-bankit` and `run` commands also use
+the new defaults. `prepare-bankit --exclude-autonomous-regions` explicitly opts
+into the old regional subset; the national grid/workflow never uses that option.
+The optional group split remains available as a separate design.
 
-1. Run one small Bankitalia configuration and inspect convergence/acceptance.
-2. Tune `K` and `lambda2` in the inner validation split.
-3. Freeze the protocol before running all 18 depth/period combinations.
-4. Add the final chapter's tree, random-forest, boosting, CNN, and GNN results
-   from the same outer splits if a direct chapter-to-chapter comparison is
-   required.
-5. Compare feature stability across repetitions, not just one selected support.
+## Verification
 
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+```
+
+Tests check exact Bank-style split indices and threshold decisions, training-only
+selection, common indicator cohorts, sparse optimisation, and protocol-aware
+resume behaviour. No complete municipal training run is performed by the tests.

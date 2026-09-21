@@ -16,8 +16,10 @@ class SparsePIHTLogisticClassifier(ClassifierMixin, BaseEstimator):
         k: int,
         *,
         max_iter: int = 1000,
-        batch_size_initial: int = 64,
+        batch_size_initial: int = 256,
         batch_size_max: int | None = None,
+        batch_sampling: str = "stratified",
+        min_positive_fraction: float = 0.1,
         l2: float = 0.0,
         eta1: float = 1e-4,
         eta2: float = 1e-4,
@@ -32,6 +34,8 @@ class SparsePIHTLogisticClassifier(ClassifierMixin, BaseEstimator):
         self.max_iter = max_iter
         self.batch_size_initial = batch_size_initial
         self.batch_size_max = batch_size_max
+        self.batch_sampling = batch_sampling
+        self.min_positive_fraction = min_positive_fraction
         self.l2 = l2
         self.eta1 = eta1
         self.eta2 = eta2
@@ -42,7 +46,7 @@ class SparsePIHTLogisticClassifier(ClassifierMixin, BaseEstimator):
         self.class_weight = class_weight
         self.random_state = random_state
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, progress_callback=None):
         X, y = check_X_y(X, y, dtype=float, ensure_all_finite=True)
         classes = np.unique(y)
         if not np.array_equal(classes, np.array([0, 1])):
@@ -63,6 +67,8 @@ class SparsePIHTLogisticClassifier(ClassifierMixin, BaseEstimator):
             max_iter=self.max_iter,
             batch_size_initial=self.batch_size_initial,
             batch_size_max=self.batch_size_max,
+            batch_sampling=self.batch_sampling,
+            min_positive_fraction=self.min_positive_fraction,
             l2=self.l2,
             eta1=self.eta1,
             eta2=self.eta2,
@@ -72,7 +78,13 @@ class SparsePIHTLogisticClassifier(ClassifierMixin, BaseEstimator):
             min_delta=self.min_delta,
             random_state=self.random_state,
         )
-        result = fit_piht_logistic(X, y.astype(float), weights, config)
+        result = fit_piht_logistic(
+            X,
+            y.astype(float),
+            weights,
+            config,
+            progress_callback=progress_callback,
+        )
         self.classes_ = classes
         self.coef_ = result.coef.reshape(1, -1)
         self.intercept_ = np.array([result.intercept])

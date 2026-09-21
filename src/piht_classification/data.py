@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +29,15 @@ class PreparedDataset:
     feature_names: list[str]
     static_feature_count: int
     metadata: dict
+
+
+def source_fingerprint(root: Path) -> str:
+    """Hash the CSV inputs so resume cannot confuse changed data with an old run."""
+    digest = hashlib.sha256()
+    for path in sorted((root / "data").rglob("*.csv")):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
 
 
 def _read_yearly(root: Path, directory: str, years: range) -> dict[int, pd.DataFrame]:
@@ -75,14 +85,18 @@ def prepare_bankit_dataset(
     input_depth: int,
     target_depth: int,
     features: str = "bdap",
-    exclude_autonomous_regions: bool = True,
+    exclude_autonomous_regions: bool = False,
 ) -> PreparedDataset:
     root = Path(bankit_root).expanduser().resolve()
     valid_features = {
+        "anticipazioni",
         "bdap",
         "bdap-anticipazioni",
+        "bdap-anticipazioni-reduced",
         "bdap-indicatori-anticipazioni",
         "indicatori",
+        "indicatori-anticipazioni",
+        "readybdap-anticipazioni",
     }
     if features not in valid_features:
         raise ValueError(f"features must be one of {sorted(valid_features)}")
@@ -95,19 +109,42 @@ def prepare_bankit_dataset(
     if exclude_autonomous_regions:
         comuni = comuni.loc[~comuni["Regione"].isin(AUTONOMOUS_REGIONS)]
 
-    use_bdap = features.startswith("bdap")
+    use_bdap = features.startswith("bdap") or features.startswith("readybdap")
     use_anticipazioni = "anticipazioni" in features
     use_indicatori = "indicatori" in features
+    use_reduced_bdap = features in {
+        "bdap-anticipazioni-reduced",
+        "readybdap-anticipazioni",
+    }
 
     spese = _read_yearly(root, "Spese", years) if use_bdap else None
     entrate = _read_yearly(root, "Entrate", years) if use_bdap else None
+    if use_reduced_bdap:
+        spese = {
+            year: frame[
+                [column for column in frame.columns if "Impegno" in column or "Impegni" in column]
+            ]
+            for year, frame in spese.items()
+        }
+        entrate = {
+            year: frame[
+                [
+                    column
+                    for column in frame.columns
+                    if "Accertamento" in column or "Accertamenti" in column
+                ]
+            ]
+            for year, frame in entrate.items()
+        }
     anticipazioni = _read_yearly(root, "Anticipazioni", years) if use_anticipazioni else None
     indicatori = _read_yearly(root, "Indicatori", range(2016, 2024)) if use_indicatori else None
 
     if use_indicatori:
         if period != 2:
             raise ValueError("indicatori are only available for period 2")
-        comuni = comuni.loc[comuni.index.intersection(indicatori[2016].index)]
+        # Keep the common national roster; missing indicator records are imputed to zero.
+        indicatori = {year: table.reindex(comuni.index).fillna(0.0)
+                      for year, table in indicatori.items()}
 
     population = pd.read_csv(root / "data" / "popolazione.csv", index_col="BDAP")
     zones = pd.read_csv(root / "data" / "zona.csv", index_col="BDAP") if use_bdap else None
@@ -177,6 +214,11 @@ def prepare_bankit_dataset(
             "target_depth": target_depth,
             "features": features,
             "excluded_autonomous_regions": exclude_autonomous_regions,
+            "municipality_count": len(comuni),
+            "source_sha256": source_fingerprint(root),
+            "indicator_cohort": "common_roster",
+            "indicator_missing": "zero",
+            "data_protocol": "national_common_roster_v1",
         },
     )
 
@@ -226,4 +268,3 @@ def flatten_panel(dataset: PreparedDataset) -> tuple[NDArray[np.float64], list[s
         temporal = np.concatenate((temporal, X[:, 0, n_temporal:]), axis=1)
         names.extend(dataset.feature_names[n_temporal:])
     return temporal, names
-
